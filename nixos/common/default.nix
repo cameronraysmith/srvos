@@ -28,24 +28,30 @@
     !(options.environment ? persistence)
   ) (lib.mkDefault true);
 
-  # Guard against subuids/subgids which userborn does not support.
-  # This is checked via assertion rather than mkIf to avoid an infinite
-  # recursion: reading config.users.users in the mkIf condition creates a
-  # cycle through nix.settings -> nix-required-mounts -> systemd.tmpfiles
-  # -> userborn -> services.userborn.enable.
+  # Guard against explicit subordinate UID/GID ranges which userborn does
+  # not support. This is checked via assertion rather than mkIf to avoid an
+  # infinite recursion: reading config.users.users in the mkIf condition
+  # creates a cycle through nix.settings -> nix-required-mounts ->
+  # systemd.tmpfiles -> userborn -> services.userborn.enable.
+  #
+  # Only explicit subUidRanges/subGidRanges are checked, not
+  # autoSubUidGidRange, because nixpkgs defaults autoSubUidGidRange to true
+  # for all normal users (users-groups.nix) which would effectively disable
+  # userborn on every configuration with normal users.
   # https://github.com/nikstur/userborn/issues/7
   assertions = [
     {
       assertion =
         config.services.userborn.enable
-        -> !(lib.any (u: u.subUidRanges != [ ] || u.autoSubUidGidRange) (
+        -> !(lib.any (u: u.subUidRanges != [ ] || u.subGidRanges != [ ]) (
           lib.attrValues config.users.users
         ));
       message = ''
-        services.userborn.enable is true, but some users have subUidRanges
-        or autoSubUidGidRange set. userborn does not support these features.
-        Either set services.userborn.enable = false or remove the subUid/subGid
-        configuration. See https://github.com/nikstur/userborn/issues/7
+        services.userborn.enable is true, but some users have explicit
+        subUidRanges or subGidRanges set. userborn does not support subordinate
+        UID/GID management. Either set services.userborn.enable = false or
+        remove the subUidRanges/subGidRanges configuration.
+        See https://github.com/nikstur/userborn/issues/7
       '';
     }
   ];
